@@ -9,18 +9,54 @@ from io import BytesIO
 # -------------------------------------------------
 
 st.set_page_config(
-    page_title="Control SLA Panasonic",
+    page_title="Control de Tiempos Panasonic",
     layout="wide"
 )
 
-st.title("📦 Control de Casos SLA Panasonic")
+# -------------------------------------------------
+# ESTILO VISUAL
+# -------------------------------------------------
 
 st.markdown("""
-Este aplicativo analiza automáticamente los casos y detecta:
+<style>
 
-- ✅ Casos normales
-- ⚠️ Casos próximos a vencerse
-- 🚨 Casos que superan 15 días hábiles
+.main {
+    background-color: #f5f7fb;
+}
+
+h1 {
+    color: #003366;
+    font-weight: bold;
+}
+
+.stMetric {
+    background-color: white;
+    padding: 15px;
+    border-radius: 12px;
+    box-shadow: 0px 2px 8px rgba(0,0,0,0.08);
+}
+
+div[data-testid="stDataFrame"] {
+    background-color: white;
+    border-radius: 12px;
+    padding: 10px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------------------------------
+# TÍTULO
+# -------------------------------------------------
+
+st.title("📦 Control de Tiempos de Atención")
+
+st.markdown("""
+Sistema de seguimiento para identificación de casos:
+
+- ✅ Dentro del tiempo esperado
+- ⚠️ Próximos a vencimiento
+- 🚨 Requieren gestión prioritaria
 """)
 
 # -------------------------------------------------
@@ -46,7 +82,53 @@ def calcular_dias_habiles(fecha_inicio, fecha_fin):
     return max(len(dias_habiles) - 1, 0)
 
 # -------------------------------------------------
-# CARGAR ARCHIVO
+# CLASIFICACIÓN
+# -------------------------------------------------
+
+def clasificar_caso(dias):
+
+    if pd.isnull(dias):
+        return "SIN FECHA"
+
+    elif dias >= 15:
+        return "GESTIÓN PRIORITARIA"
+
+    elif dias >= 12:
+        return "PRÓXIMO A VENCER"
+
+    else:
+        return "DENTRO DEL TIEMPO"
+
+# -------------------------------------------------
+# ACCIONES RECOMENDADAS
+# -------------------------------------------------
+
+def accion_recomendada(estado):
+
+    if estado == "GESTIÓN PRIORITARIA":
+
+        return (
+            "Validar inmediatamente el estado "
+            "del caso y gestionar escalamiento."
+        )
+
+    elif estado == "PRÓXIMO A VENCER":
+
+        return (
+            "Realizar seguimiento preventivo "
+            "y validar disponibilidad."
+        )
+
+    elif estado == "DENTRO DEL TIEMPO":
+
+        return (
+            "Continuar proceso operativo normal."
+        )
+
+    return "Validar información."
+
+# -------------------------------------------------
+# CARGA ARCHIVO
 # -------------------------------------------------
 
 archivo = st.file_uploader(
@@ -62,22 +144,22 @@ if archivo:
 
     try:
 
-        # LEER EXCEL
+        # LEER ARCHIVO
         df = pd.read_excel(archivo)
 
         st.success("✅ Archivo cargado correctamente")
 
         # -------------------------------------------------
-        # VALIDAR COLUMNA FECHA
+        # VALIDAR COLUMNA
         # -------------------------------------------------
 
         columna_fecha = "Fecha/Hora de apertura"
 
         if columna_fecha not in df.columns:
 
-            st.error(f"No se encontró la columna: {columna_fecha}")
-
-            st.write("Columnas encontradas:")
+            st.error(
+                f"No se encontró la columna: {columna_fecha}"
+            )
 
             st.write(df.columns.tolist())
 
@@ -92,41 +174,36 @@ if archivo:
             errors='coerce'
         )
 
-        # -------------------------------------------------
-        # FECHA ACTUAL
-        # -------------------------------------------------
-
         fecha_actual = pd.Timestamp.now()
 
         # -------------------------------------------------
-        # CALCULAR DÍAS HÁBILES
+        # CÁLCULO DÍAS
         # -------------------------------------------------
 
         df["Días hábiles"] = df[columna_fecha].apply(
-            lambda x: calcular_dias_habiles(x, fecha_actual)
+            lambda x: calcular_dias_habiles(
+                x,
+                fecha_actual
+            )
             if pd.notnull(x)
             else None
         )
 
         # -------------------------------------------------
-        # CLASIFICAR SLA
+        # ESTADO
         # -------------------------------------------------
 
-        def clasificar_caso(dias):
+        df["Clasificación"] = df[
+            "Días hábiles"
+        ].apply(clasificar_caso)
 
-            if pd.isnull(dias):
-                return "SIN FECHA"
+        # -------------------------------------------------
+        # ACCIÓN
+        # -------------------------------------------------
 
-            elif dias >= 15:
-                return "SE VA DE CAMBIO"
-
-            elif dias >= 12:
-                return "PRÓXIMO A VENCER"
-
-            else:
-                return "NORMAL"
-
-        df["Estado SLA"] = df["Días hábiles"].apply(clasificar_caso)
+        df["Acción recomendada"] = df[
+            "Clasificación"
+        ].apply(accion_recomendada)
 
         # -------------------------------------------------
         # MÉTRICAS
@@ -134,63 +211,75 @@ if archivo:
 
         total_casos = len(df)
 
-        casos_vencidos = len(
-            df[df["Estado SLA"] == "SE VA DE CAMBIO"]
+        gestion_prioritaria = len(
+            df[
+                df["Clasificación"]
+                == "GESTIÓN PRIORITARIA"
+            ]
         )
 
-        casos_proximos = len(
-            df[df["Estado SLA"] == "PRÓXIMO A VENCER"]
+        proximos = len(
+            df[
+                df["Clasificación"]
+                == "PRÓXIMO A VENCER"
+            ]
         )
 
-        casos_normales = len(
-            df[df["Estado SLA"] == "NORMAL"]
+        normales = len(
+            df[
+                df["Clasificación"]
+                == "DENTRO DEL TIEMPO"
+            ]
         )
 
         col1, col2, col3, col4 = st.columns(4)
 
-        col1.metric("Total Casos", total_casos)
+        col1.metric(
+            "Total Casos",
+            total_casos
+        )
 
         col2.metric(
-            "🚨 Se van de cambio",
-            casos_vencidos
+            "🚨 Gestión prioritaria",
+            gestion_prioritaria
         )
 
         col3.metric(
             "⚠️ Próximos",
-            casos_proximos
+            proximos
         )
 
         col4.metric(
-            "✅ Normales",
-            casos_normales
+            "✅ Dentro del tiempo",
+            normales
         )
 
         # -------------------------------------------------
-        # GRÁFICO
+        # GRÁFICA
         # -------------------------------------------------
 
-        conteo_estados = (
-            df["Estado SLA"]
+        conteo = (
+            df["Clasificación"]
             .value_counts()
             .reset_index()
         )
 
-        conteo_estados.columns = [
+        conteo.columns = [
             "Estado",
             "Cantidad"
         ]
 
         fig = px.pie(
-            conteo_estados,
+            conteo,
             names="Estado",
             values="Cantidad",
-            title="Distribución SLA",
-            hole=0.4,
+            title="Distribución de casos",
+            hole=0.45,
             color="Estado",
             color_discrete_map={
-                "NORMAL": "green",
+                "DENTRO DEL TIEMPO": "green",
                 "PRÓXIMO A VENCER": "orange",
-                "SE VA DE CAMBIO": "red",
+                "GESTIÓN PRIORITARIA": "red",
                 "SIN FECHA": "gray"
             }
         )
@@ -205,12 +294,12 @@ if archivo:
         # -------------------------------------------------
 
         filtro = st.selectbox(
-            "Filtrar casos",
+            "Filtrar clasificación",
             [
                 "TODOS",
-                "SE VA DE CAMBIO",
+                "GESTIÓN PRIORITARIA",
                 "PRÓXIMO A VENCER",
-                "NORMAL",
+                "DENTRO DEL TIEMPO",
                 "SIN FECHA"
             ]
         )
@@ -218,7 +307,7 @@ if archivo:
         if filtro != "TODOS":
 
             df_filtrado = df[
-                df["Estado SLA"] == filtro
+                df["Clasificación"] == filtro
             ]
 
         else:
@@ -226,46 +315,50 @@ if archivo:
             df_filtrado = df
 
         # -------------------------------------------------
-        # COLORES TABLA
+        # COLORES
         # -------------------------------------------------
 
         def colorear_estado(valor):
 
-            if valor == "SE VA DE CAMBIO":
+            if valor == "GESTIÓN PRIORITARIA":
 
                 return (
-                    "background-color: #ff4b4b;"
-                    "color: white;"
-                    "font-weight: bold"
+                    "background-color:#d62828;"
+                    "color:white;"
+                    "font-weight:bold"
                 )
 
             elif valor == "PRÓXIMO A VENCER":
 
                 return (
-                    "background-color: #ffa500;"
-                    "color: black;"
-                    "font-weight: bold"
+                    "background-color:#f77f00;"
+                    "color:white;"
+                    "font-weight:bold"
                 )
 
-            elif valor == "NORMAL":
+            elif valor == "DENTRO DEL TIEMPO":
 
                 return (
-                    "background-color: #28a745;"
-                    "color: white"
+                    "background-color:#2a9d8f;"
+                    "color:white;"
                 )
 
             elif valor == "SIN FECHA":
 
                 return (
-                    "background-color: gray;"
-                    "color: white"
+                    "background-color:gray;"
+                    "color:white;"
                 )
 
             return ""
 
         # -------------------------------------------------
-        # COLUMNAS A MOSTRAR
+        # TABLA PRINCIPAL
         # -------------------------------------------------
+
+        st.subheader(
+            "📋 Clasificación Operativa de Casos"
+        )
 
         columnas_mostrar = [
             "Número del caso",
@@ -274,7 +367,8 @@ if archivo:
             "Descripcion del producto",
             "Fecha/Hora de apertura",
             "Días hábiles",
-            "Estado SLA"
+            "Clasificación",
+            "Acción recomendada"
         ]
 
         columnas_existentes = [
@@ -282,22 +376,32 @@ if archivo:
             if col in df_filtrado.columns
         ]
 
-        # -------------------------------------------------
-        # TABLA
-        # -------------------------------------------------
-
-        st.subheader("📋 Resultado del análisis")
-
         st.dataframe(
             df_filtrado[columnas_existentes]
             .style
             .applymap(
                 colorear_estado,
-                subset=["Estado SLA"]
+                subset=["Clasificación"]
             ),
             use_container_width=True,
-            height=600
+            height=650
         )
+
+        # -------------------------------------------------
+        # TABLA RESUMEN
+        # -------------------------------------------------
+
+        st.subheader(
+            "📊 Resumen de gestión"
+        )
+
+        resumen = (
+            df.groupby("Clasificación")
+            .size()
+            .reset_index(name="Cantidad")
+        )
+
+        st.table(resumen)
 
         # -------------------------------------------------
         # EXPORTAR EXCEL
@@ -319,17 +423,19 @@ if archivo:
 
             return salida.getvalue()
 
-        excel_descarga = convertir_excel(df_filtrado)
+        excel_descarga = convertir_excel(
+            df_filtrado
+        )
 
         st.download_button(
-            label="📥 Descargar Excel",
+            label="📥 Descargar reporte Excel",
             data=excel_descarga,
-            file_name="analisis_sla_panasonic.xlsx",
+            file_name="control_tiempos_panasonic.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
 
         st.error(
-            f"❌ Error procesando archivo: {e}"
+            f"Error procesando archivo: {e}"
         )
