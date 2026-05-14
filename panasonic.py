@@ -14,32 +14,24 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# ESTILO VISUAL
+# ESTILOS GENERALES
 # -------------------------------------------------
 
 st.markdown("""
 <style>
 
-.main {
-    background-color: #f5f7fb;
+.block-container {
+    padding-top: 2rem;
 }
 
 h1 {
-    color: #003366;
-    font-weight: bold;
+    font-weight: 700;
 }
 
-.stMetric {
-    background-color: white;
+div[data-testid="stMetric"] {
+    border: 1px solid rgba(128,128,128,0.2);
     padding: 15px;
     border-radius: 12px;
-    box-shadow: 0px 2px 8px rgba(0,0,0,0.08);
-}
-
-div[data-testid="stDataFrame"] {
-    background-color: white;
-    border-radius: 12px;
-    padding: 10px;
 }
 
 </style>
@@ -100,7 +92,7 @@ def clasificar_caso(dias):
         return "DENTRO DEL TIEMPO"
 
 # -------------------------------------------------
-# ACCIONES RECOMENDADAS
+# ACCIÓN RECOMENDADA
 # -------------------------------------------------
 
 def accion_recomendada(estado):
@@ -128,7 +120,47 @@ def accion_recomendada(estado):
     return "Validar información."
 
 # -------------------------------------------------
-# CARGA ARCHIVO
+# COLORES TABLA
+# -------------------------------------------------
+
+def colorear_estado(valor):
+
+    if valor == "GESTIÓN PRIORITARIA":
+
+        return (
+            "background-color: #ffcccc;"
+            "color: black;"
+            "font-weight: bold;"
+        )
+
+    elif valor == "PRÓXIMO A VENCER":
+
+        return (
+            "background-color: #ffe5b4;"
+            "color: black;"
+            "font-weight: bold;"
+        )
+
+    elif valor == "DENTRO DEL TIEMPO":
+
+        return (
+            "background-color: #d4edda;"
+            "color: black;"
+            "font-weight: bold;"
+        )
+
+    elif valor == "SIN FECHA":
+
+        return (
+            "background-color: #e2e3e5;"
+            "color: black;"
+            "font-weight: bold;"
+        )
+
+    return ""
+
+# -------------------------------------------------
+# CARGAR ARCHIVO
 # -------------------------------------------------
 
 archivo = st.file_uploader(
@@ -144,13 +176,13 @@ if archivo:
 
     try:
 
-        # LEER ARCHIVO
+        # LEER EXCEL
         df = pd.read_excel(archivo)
 
         st.success("✅ Archivo cargado correctamente")
 
         # -------------------------------------------------
-        # VALIDAR COLUMNA
+        # VALIDAR COLUMNA FECHA
         # -------------------------------------------------
 
         columna_fecha = "Fecha/Hora de apertura"
@@ -160,6 +192,8 @@ if archivo:
             st.error(
                 f"No se encontró la columna: {columna_fecha}"
             )
+
+            st.write("Columnas encontradas:")
 
             st.write(df.columns.tolist())
 
@@ -177,7 +211,7 @@ if archivo:
         fecha_actual = pd.Timestamp.now()
 
         # -------------------------------------------------
-        # CÁLCULO DÍAS
+        # CALCULAR DÍAS HÁBILES
         # -------------------------------------------------
 
         df["Días hábiles"] = df[columna_fecha].apply(
@@ -190,7 +224,7 @@ if archivo:
         )
 
         # -------------------------------------------------
-        # ESTADO
+        # CLASIFICACIÓN
         # -------------------------------------------------
 
         df["Clasificación"] = df[
@@ -198,7 +232,7 @@ if archivo:
         ].apply(clasificar_caso)
 
         # -------------------------------------------------
-        # ACCIÓN
+        # ACCIÓN RECOMENDADA
         # -------------------------------------------------
 
         df["Acción recomendada"] = df[
@@ -245,7 +279,7 @@ if archivo:
         )
 
         col3.metric(
-            "⚠️ Próximos",
+            "⚠️ Próximos a vencimiento",
             proximos
         )
 
@@ -255,7 +289,7 @@ if archivo:
         )
 
         # -------------------------------------------------
-        # GRÁFICA
+        # GRÁFICO
         # -------------------------------------------------
 
         conteo = (
@@ -265,22 +299,22 @@ if archivo:
         )
 
         conteo.columns = [
-            "Estado",
+            "Clasificación",
             "Cantidad"
         ]
 
         fig = px.pie(
             conteo,
-            names="Estado",
+            names="Clasificación",
             values="Cantidad",
-            title="Distribución de casos",
+            title="Distribución de Casos",
             hole=0.45,
-            color="Estado",
+            color="Clasificación",
             color_discrete_map={
-                "DENTRO DEL TIEMPO": "green",
-                "PRÓXIMO A VENCER": "orange",
-                "GESTIÓN PRIORITARIA": "red",
-                "SIN FECHA": "gray"
+                "GESTIÓN PRIORITARIA": "#ff6b6b",
+                "PRÓXIMO A VENCER": "#f4a261",
+                "DENTRO DEL TIEMPO": "#52b788",
+                "SIN FECHA": "#adb5bd"
             }
         )
 
@@ -315,44 +349,6 @@ if archivo:
             df_filtrado = df
 
         # -------------------------------------------------
-        # COLORES
-        # -------------------------------------------------
-
-        def colorear_estado(valor):
-
-            if valor == "GESTIÓN PRIORITARIA":
-
-                return (
-                    "background-color:#d62828;"
-                    "color:white;"
-                    "font-weight:bold"
-                )
-
-            elif valor == "PRÓXIMO A VENCER":
-
-                return (
-                    "background-color:#f77f00;"
-                    "color:white;"
-                    "font-weight:bold"
-                )
-
-            elif valor == "DENTRO DEL TIEMPO":
-
-                return (
-                    "background-color:#2a9d8f;"
-                    "color:white;"
-                )
-
-            elif valor == "SIN FECHA":
-
-                return (
-                    "background-color:gray;"
-                    "color:white;"
-                )
-
-            return ""
-
-        # -------------------------------------------------
         # TABLA PRINCIPAL
         # -------------------------------------------------
 
@@ -376,24 +372,26 @@ if archivo:
             if col in df_filtrado.columns
         ]
 
-        st.dataframe(
+        tabla_estilizada = (
             df_filtrado[columnas_existentes]
             .style
-            .applymap(
+            .map(
                 colorear_estado,
                 subset=["Clasificación"]
-            ),
+            )
+        )
+
+        st.dataframe(
+            tabla_estilizada,
             use_container_width=True,
             height=650
         )
 
         # -------------------------------------------------
-        # TABLA RESUMEN
+        # RESUMEN
         # -------------------------------------------------
 
-        st.subheader(
-            "📊 Resumen de gestión"
-        )
+        st.subheader("📊 Resumen General")
 
         resumen = (
             df.groupby("Clasificación")
