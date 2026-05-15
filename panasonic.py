@@ -14,7 +14,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------
-# ESTILOS GENERALES
+# ESTILOS VISUALES
 # -------------------------------------------------
 
 st.markdown("""
@@ -72,6 +72,55 @@ def calcular_dias_habiles(fecha_inicio, fecha_fin):
     ]
 
     return max(len(dias_habiles) - 1, 0)
+
+# -------------------------------------------------
+# TRANSFORMAR FECHAS SALESFORCE
+# -------------------------------------------------
+
+def transformar_fecha_salesforce(valor):
+
+    if pd.isnull(valor):
+        return pd.NaT
+
+    try:
+
+        # convertir a texto
+        valor = str(valor)
+
+        # limpiar espacios unicode invisibles
+        valor = (
+            valor
+            .replace("\xa0", " ")
+            .replace("\u202f", " ")
+            .replace("\u2009", " ")
+            .strip()
+        )
+
+        # normalizar AM/PM
+        valor = (
+            valor
+            .replace("a. m.", "AM")
+            .replace("p. m.", "PM")
+            .replace("a.m.", "AM")
+            .replace("p.m.", "PM")
+            .replace("a. m", "AM")
+            .replace("p. m", "PM")
+        )
+
+        # eliminar espacios dobles
+        valor = " ".join(valor.split())
+
+        # convertir fecha
+        fecha = pd.to_datetime(
+            valor,
+            format="%d/%m/%Y, %I:%M %p",
+            errors="coerce"
+        )
+
+        return fecha
+
+    except Exception:
+        return pd.NaT
 
 # -------------------------------------------------
 # CLASIFICACIÓN
@@ -176,13 +225,16 @@ if archivo:
 
     try:
 
+        # -------------------------------------------------
         # LEER EXCEL
+        # -------------------------------------------------
+
         df = pd.read_excel(archivo)
 
         st.success("✅ Archivo cargado correctamente")
 
         # -------------------------------------------------
-        # VALIDAR COLUMNA FECHA
+        # VALIDAR COLUMNA
         # -------------------------------------------------
 
         columna_fecha = "Fecha/Hora de apertura"
@@ -193,20 +245,37 @@ if archivo:
                 f"No se encontró la columna: {columna_fecha}"
             )
 
-            st.write("Columnas encontradas:")
-
             st.write(df.columns.tolist())
 
             st.stop()
 
         # -------------------------------------------------
-        # CONVERTIR FECHA
+        # TRANSFORMAR FECHAS
         # -------------------------------------------------
 
-        df[columna_fecha] = pd.to_datetime(
-            df[columna_fecha],
-            errors='coerce'
+        df[columna_fecha] = (
+            df[columna_fecha]
+            .astype(str)
+            .apply(transformar_fecha_salesforce)
         )
+
+        # -------------------------------------------------
+        # VALIDAR FECHAS
+        # -------------------------------------------------
+
+        fechas_invalidas = df[columna_fecha].isna().sum()
+
+        if fechas_invalidas > 0:
+
+            st.warning(
+                f"⚠️ Se encontraron "
+                f"{fechas_invalidas} registros "
+                f"con fecha inválida."
+            )
+
+        # -------------------------------------------------
+        # FECHA ACTUAL
+        # -------------------------------------------------
 
         fecha_actual = pd.Timestamp.now()
 
@@ -224,6 +293,16 @@ if archivo:
         )
 
         # -------------------------------------------------
+        # LIMPIAR DÍAS
+        # -------------------------------------------------
+
+        df["Días hábiles"] = (
+            df["Días hábiles"]
+            .fillna(0)
+            .astype(int)
+        )
+
+        # -------------------------------------------------
         # CLASIFICACIÓN
         # -------------------------------------------------
 
@@ -238,6 +317,15 @@ if archivo:
         df["Acción recomendada"] = df[
             "Clasificación"
         ].apply(accion_recomendada)
+
+        # -------------------------------------------------
+        # ORDENAR
+        # -------------------------------------------------
+
+        df = df.sort_values(
+            by="Días hábiles",
+            ascending=False
+        )
 
         # -------------------------------------------------
         # MÉTRICAS
@@ -349,7 +437,7 @@ if archivo:
             df_filtrado = df
 
         # -------------------------------------------------
-        # TABLA PRINCIPAL
+        # TABLA
         # -------------------------------------------------
 
         st.subheader(
@@ -361,7 +449,10 @@ if archivo:
             "Modelo",
             "Centro de servicio solicitante",
             "Descripcion del producto",
+            "Cantidad solicitada",
+            "Fecha de Compra",
             "Fecha/Hora de apertura",
+            "Fecha de solicitud",
             "Días hábiles",
             "Clasificación",
             "Acción recomendada"
