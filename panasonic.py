@@ -46,9 +46,19 @@ st.title("📦 Control de Tiempos de Atención")
 st.markdown("""
 Sistema de seguimiento para identificación de casos:
 
-- ✅ Dentro del tiempo esperado
-- ⚠️ Próximos a vencimiento
-- 🚨 Requieren gestión prioritaria
+- ✅ Dentro del tiempo:
+  Casos entre 0 y 11 días hábiles.
+
+- ⚠️ Próximos a vencimiento:
+  Casos entre 12 y 14 días hábiles.
+
+- 🚨 Gestión prioritaria:
+  Casos con 15 días hábiles o más.
+
+Los cálculos excluyen:
+- Sábados
+- Domingos
+- Festivos oficiales de Colombia
 """)
 
 # -------------------------------------------------
