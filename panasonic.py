@@ -5,16 +5,16 @@ import plotly.express as px
 from io import BytesIO
 
 # -------------------------------------------------
-# CONFIGURACIÓN DE PÁGINA
+# PAGE CONFIGURATION
 # -------------------------------------------------
 
 st.set_page_config(
-    page_title="Control de Tiempos Panasonic",
+    page_title="Panasonic Case Monitoring",
     layout="wide"
 )
 
 # -------------------------------------------------
-# ESTILOS VISUALES
+# VISUAL STYLE
 # -------------------------------------------------
 
 st.markdown("""
@@ -38,42 +38,63 @@ div[data-testid="stMetric"] {
 """, unsafe_allow_html=True)
 
 # -------------------------------------------------
-# TÍTULO
+# TITLE
 # -------------------------------------------------
 
-st.title("📦 Control de Tiempos de Atención")
+st.title("📦 Case Lead Time Monitoring")
 
 st.markdown("""
-Sistema de seguimiento para identificación de casos:
+Monitoring system for operational case tracking:
 
-- ✅ Dentro del tiempo:
-  Casos entre 0 y 11 días hábiles.
-
-- ⚠️ Próximos a vencimiento:
-  Casos entre 12 y 14 días hábiles.
-
-- 🚨 Gestión prioritaria:
-  Casos con 15 días hábiles o más.
-
-Los cálculos excluyen:
-- Sábados
-- Domingos
-- Festivos oficiales de Colombia
+- ✅ Within target
+- ⚠️ Near due date
+- 🚨 Priority management required
 """)
 
 # -------------------------------------------------
-# FESTIVOS COLOMBIA
+# CLASSIFICATION RULES
+# -------------------------------------------------
+
+st.info("""
+📌 Classification Criteria (Colombian Business Days)
+
+✅ WITHIN TARGET
+Cases between 0 and 11 business days.
+
+⚠️ NEAR DUE DATE
+Cases between 12 and 14 business days.
+
+🚨 PRIORITY MANAGEMENT
+Cases with 15 business days or more.
+
+Business day calculation excludes:
+• Saturdays
+• Sundays
+• Official Colombian holidays
+
+The opening date and current date ARE included in the calculation.
+""")
+
+# -------------------------------------------------
+# COLOMBIAN HOLIDAYS
 # -------------------------------------------------
 
 festivos_colombia = holidays.Colombia()
 
 # -------------------------------------------------
-# FUNCIÓN DÍAS HÁBILES
+# BUSINESS DAYS CALCULATION
 # -------------------------------------------------
 
 def calcular_dias_habiles(fecha_inicio, fecha_fin):
 
-    dias = pd.date_range(fecha_inicio, fecha_fin)
+    fecha_inicio = fecha_inicio.normalize()
+    fecha_fin = fecha_fin.normalize()
+
+    dias = pd.date_range(
+        start=fecha_inicio,
+        end=fecha_fin,
+        freq='D'
+    )
 
     dias_habiles = [
         dia for dia in dias
@@ -81,10 +102,10 @@ def calcular_dias_habiles(fecha_inicio, fecha_fin):
         and dia.date() not in festivos_colombia
     ]
 
-    return max(len(dias_habiles) - 1, 0)
+    return len(dias_habiles)
 
 # -------------------------------------------------
-# TRANSFORMAR FECHAS SALESFORCE
+# SALESFORCE DATE TRANSFORMATION
 # -------------------------------------------------
 
 def transformar_fecha_salesforce(valor):
@@ -94,10 +115,8 @@ def transformar_fecha_salesforce(valor):
 
     try:
 
-        # convertir a texto
         valor = str(valor)
 
-        # limpiar espacios unicode invisibles
         valor = (
             valor
             .replace("\xa0", " ")
@@ -106,7 +125,6 @@ def transformar_fecha_salesforce(valor):
             .strip()
         )
 
-        # normalizar AM/PM
         valor = (
             valor
             .replace("a. m.", "AM")
@@ -117,10 +135,8 @@ def transformar_fecha_salesforce(valor):
             .replace("p. m", "PM")
         )
 
-        # eliminar espacios dobles
         valor = " ".join(valor.split())
 
-        # convertir fecha
         fecha = pd.to_datetime(
             valor,
             format="%d/%m/%Y, %I:%M %p",
@@ -133,58 +149,56 @@ def transformar_fecha_salesforce(valor):
         return pd.NaT
 
 # -------------------------------------------------
-# CLASIFICACIÓN
+# CASE CLASSIFICATION
 # -------------------------------------------------
 
 def clasificar_caso(dias):
 
     if pd.isnull(dias):
-        return "SIN FECHA"
+        return "NO DATE"
 
     elif dias >= 15:
-        return "GESTIÓN PRIORITARIA"
+        return "PRIORITY MANAGEMENT"
 
     elif dias >= 12:
-        return "PRÓXIMO A VENCER"
+        return "NEAR DUE DATE"
 
     else:
-        return "DENTRO DEL TIEMPO"
+        return "WITHIN TARGET"
 
 # -------------------------------------------------
-# ACCIÓN RECOMENDADA
+# RECOMMENDED ACTION
 # -------------------------------------------------
 
 def accion_recomendada(estado):
 
-    if estado == "GESTIÓN PRIORITARIA":
+    if estado == "PRIORITY MANAGEMENT":
 
         return (
-            "Validar inmediatamente el estado "
-            "del caso y gestionar escalamiento."
+            "Immediate validation and escalation required."
         )
 
-    elif estado == "PRÓXIMO A VENCER":
+    elif estado == "NEAR DUE DATE":
 
         return (
-            "Realizar seguimiento preventivo "
-            "y validar disponibilidad."
+            "Preventive follow-up recommended."
         )
 
-    elif estado == "DENTRO DEL TIEMPO":
+    elif estado == "WITHIN TARGET":
 
         return (
-            "Continuar proceso operativo normal."
+            "Normal operational flow."
         )
 
-    return "Validar información."
+    return "Review information."
 
 # -------------------------------------------------
-# COLORES TABLA
+# TABLE COLORS
 # -------------------------------------------------
 
 def colorear_estado(valor):
 
-    if valor == "GESTIÓN PRIORITARIA":
+    if valor == "PRIORITY MANAGEMENT":
 
         return (
             "background-color: #ffcccc;"
@@ -192,7 +206,7 @@ def colorear_estado(valor):
             "font-weight: bold;"
         )
 
-    elif valor == "PRÓXIMO A VENCER":
+    elif valor == "NEAR DUE DATE":
 
         return (
             "background-color: #ffe5b4;"
@@ -200,7 +214,7 @@ def colorear_estado(valor):
             "font-weight: bold;"
         )
 
-    elif valor == "DENTRO DEL TIEMPO":
+    elif valor == "WITHIN TARGET":
 
         return (
             "background-color: #d4edda;"
@@ -208,7 +222,7 @@ def colorear_estado(valor):
             "font-weight: bold;"
         )
 
-    elif valor == "SIN FECHA":
+    elif valor == "NO DATE":
 
         return (
             "background-color: #e2e3e5;"
@@ -219,16 +233,16 @@ def colorear_estado(valor):
     return ""
 
 # -------------------------------------------------
-# CARGAR ARCHIVO
+# FILE UPLOAD
 # -------------------------------------------------
 
 archivo = st.file_uploader(
-    "📂 Cargar archivo Excel",
+    "📂 Upload Excel File",
     type=["xlsx"]
 )
 
 # -------------------------------------------------
-# PROCESAMIENTO
+# PROCESSING
 # -------------------------------------------------
 
 if archivo:
@@ -236,15 +250,15 @@ if archivo:
     try:
 
         # -------------------------------------------------
-        # LEER EXCEL
+        # READ EXCEL
         # -------------------------------------------------
 
         df = pd.read_excel(archivo)
 
-        st.success("✅ Archivo cargado correctamente")
+        st.success("✅ File loaded successfully")
 
         # -------------------------------------------------
-        # VALIDAR COLUMNA
+        # DATE COLUMN
         # -------------------------------------------------
 
         columna_fecha = "Fecha/Hora de apertura"
@@ -252,7 +266,7 @@ if archivo:
         if columna_fecha not in df.columns:
 
             st.error(
-                f"No se encontró la columna: {columna_fecha}"
+                f"Column not found: {columna_fecha}"
             )
 
             st.write(df.columns.tolist())
@@ -260,7 +274,7 @@ if archivo:
             st.stop()
 
         # -------------------------------------------------
-        # TRANSFORMAR FECHAS
+        # TRANSFORM DATES
         # -------------------------------------------------
 
         df[columna_fecha] = (
@@ -270,7 +284,7 @@ if archivo:
         )
 
         # -------------------------------------------------
-        # VALIDAR FECHAS
+        # INVALID DATES
         # -------------------------------------------------
 
         fechas_invalidas = df[columna_fecha].isna().sum()
@@ -278,22 +292,20 @@ if archivo:
         if fechas_invalidas > 0:
 
             st.warning(
-                f"⚠️ Se encontraron "
-                f"{fechas_invalidas} registros "
-                f"con fecha inválida."
+                f"⚠️ {fechas_invalidas} records contain invalid dates."
             )
 
         # -------------------------------------------------
-        # FECHA ACTUAL
+        # CURRENT DATE
         # -------------------------------------------------
 
         fecha_actual = pd.Timestamp.now()
 
         # -------------------------------------------------
-        # CALCULAR DÍAS HÁBILES
+        # BUSINESS DAYS
         # -------------------------------------------------
 
-        df["Días hábiles"] = df[columna_fecha].apply(
+        df["Business Days"] = df[columna_fecha].apply(
             lambda x: calcular_dias_habiles(
                 x,
                 fecha_actual
@@ -302,117 +314,113 @@ if archivo:
             else None
         )
 
-        # -------------------------------------------------
-        # LIMPIAR DÍAS
-        # -------------------------------------------------
-
-        df["Días hábiles"] = (
-            df["Días hábiles"]
+        df["Business Days"] = (
+            df["Business Days"]
             .fillna(0)
             .astype(int)
         )
 
         # -------------------------------------------------
-        # CLASIFICACIÓN
+        # CLASSIFICATION
         # -------------------------------------------------
 
-        df["Clasificación"] = df[
-            "Días hábiles"
+        df["Classification"] = df[
+            "Business Days"
         ].apply(clasificar_caso)
 
         # -------------------------------------------------
-        # ACCIÓN RECOMENDADA
+        # RECOMMENDED ACTION
         # -------------------------------------------------
 
-        df["Acción recomendada"] = df[
-            "Clasificación"
+        df["Recommended Action"] = df[
+            "Classification"
         ].apply(accion_recomendada)
 
         # -------------------------------------------------
-        # ORDENAR
+        # SORT
         # -------------------------------------------------
 
         df = df.sort_values(
-            by="Días hábiles",
+            by="Business Days",
             ascending=False
         )
 
         # -------------------------------------------------
-        # MÉTRICAS
+        # METRICS
         # -------------------------------------------------
 
         total_casos = len(df)
 
-        gestion_prioritaria = len(
+        priority_cases = len(
             df[
-                df["Clasificación"]
-                == "GESTIÓN PRIORITARIA"
+                df["Classification"]
+                == "PRIORITY MANAGEMENT"
             ]
         )
 
-        proximos = len(
+        near_due = len(
             df[
-                df["Clasificación"]
-                == "PRÓXIMO A VENCER"
+                df["Classification"]
+                == "NEAR DUE DATE"
             ]
         )
 
-        normales = len(
+        within_target = len(
             df[
-                df["Clasificación"]
-                == "DENTRO DEL TIEMPO"
+                df["Classification"]
+                == "WITHIN TARGET"
             ]
         )
 
         col1, col2, col3, col4 = st.columns(4)
 
         col1.metric(
-            "Total Casos",
+            "Total Cases",
             total_casos
         )
 
         col2.metric(
-            "🚨 Gestión prioritaria",
-            gestion_prioritaria
+            "🚨 Priority",
+            priority_cases
         )
 
         col3.metric(
-            "⚠️ Próximos a vencimiento",
-            proximos
+            "⚠️ Near Due",
+            near_due
         )
 
         col4.metric(
-            "✅ Dentro del tiempo",
-            normales
+            "✅ Within Target",
+            within_target
         )
 
         # -------------------------------------------------
-        # GRÁFICO
+        # CHART
         # -------------------------------------------------
 
         conteo = (
-            df["Clasificación"]
+            df["Classification"]
             .value_counts()
             .reset_index()
         )
 
         conteo.columns = [
-            "Clasificación",
-            "Cantidad"
+            "Classification",
+            "Quantity"
         ]
 
         fig = px.pie(
             conteo,
-            names="Clasificación",
-            values="Cantidad",
-            title="Distribución de Casos",
+            names="Classification",
+            values="Quantity",
+            title="Case Distribution",
             hole=0.45,
-            color="Clasificación",
+            color="Classification",
             color_discrete_map={
-                "GESTIÓN PRIORITARIA": "#ff6b6b",
-                "PRÓXIMO A VENCER": "#f4a261",
-                "DENTRO DEL TIEMPO": "#52b788",
-                "SIN FECHA": "#adb5bd"
+                "PRIORITY MANAGEMENT": "#ff6b6b",
+                "NEAR DUE DATE": "#f4a261",
+                "WITHIN TARGET": "#52b788",
+                "NO DATE": "#adb5bd"
             }
         )
 
@@ -422,24 +430,24 @@ if archivo:
         )
 
         # -------------------------------------------------
-        # FILTRO
+        # FILTER
         # -------------------------------------------------
 
         filtro = st.selectbox(
-            "Filtrar clasificación",
+            "Filter classification",
             [
-                "TODOS",
-                "GESTIÓN PRIORITARIA",
-                "PRÓXIMO A VENCER",
-                "DENTRO DEL TIEMPO",
-                "SIN FECHA"
+                "ALL",
+                "PRIORITY MANAGEMENT",
+                "NEAR DUE DATE",
+                "WITHIN TARGET",
+                "NO DATE"
             ]
         )
 
-        if filtro != "TODOS":
+        if filtro != "ALL":
 
             df_filtrado = df[
-                df["Clasificación"] == filtro
+                df["Classification"] == filtro
             ]
 
         else:
@@ -447,25 +455,26 @@ if archivo:
             df_filtrado = df
 
         # -------------------------------------------------
-        # TABLA
+        # TABLE
         # -------------------------------------------------
 
         st.subheader(
-            "📋 Clasificación Operativa de Casos"
+            "📋 Operational Case Classification"
         )
 
         columnas_mostrar = [
             "Número del caso",
             "Modelo",
             "Centro de servicio solicitante",
+            "Sublínea",
             "Descripcion del producto",
             "Cantidad solicitada",
             "Fecha de Compra",
             "Fecha/Hora de apertura",
             "Fecha de solicitud",
-            "Días hábiles",
-            "Clasificación",
-            "Acción recomendada"
+            "Business Days",
+            "Classification",
+            "Recommended Action"
         ]
 
         columnas_existentes = [
@@ -478,7 +487,7 @@ if archivo:
             .style
             .map(
                 colorear_estado,
-                subset=["Clasificación"]
+                subset=["Classification"]
             )
         )
 
@@ -489,21 +498,21 @@ if archivo:
         )
 
         # -------------------------------------------------
-        # RESUMEN
+        # SUMMARY
         # -------------------------------------------------
 
-        st.subheader("📊 Resumen General")
+        st.subheader("📊 General Summary")
 
         resumen = (
-            df.groupby("Clasificación")
+            df.groupby("Classification")
             .size()
-            .reset_index(name="Cantidad")
+            .reset_index(name="Quantity")
         )
 
         st.table(resumen)
 
         # -------------------------------------------------
-        # EXPORTAR EXCEL
+        # EXPORT EXCEL
         # -------------------------------------------------
 
         def convertir_excel(dataframe):
@@ -527,14 +536,14 @@ if archivo:
         )
 
         st.download_button(
-            label="📥 Descargar reporte Excel",
+            label="📥 Download Excel Report",
             data=excel_descarga,
-            file_name="control_tiempos_panasonic.xlsx",
+            file_name="panasonic_case_monitoring.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     except Exception as e:
 
         st.error(
-            f"Error procesando archivo: {e}"
+            f"Error processing file: {e}"
         )
